@@ -1,0 +1,85 @@
+<?php
+set_time_limit(0);
+
+$ansiblePing = 'sudo ansible web -m command -a "true" -u root';
+$pingOutputFile = '/var/www/html/ping.txt';
+
+$output = shell_exec("{$ansiblePing} > {$pingOutputFile} 2>&1");
+echo $output;
+
+$filename = "ping.txt";
+$content = file_get_contents($filename);
+
+// Initialize array to store host statuses
+$hostsStatus = [];
+
+// Iterate through each line
+foreach (explode("\n", $content) as $line) {
+    if (preg_match('/(\d+\.\d+\.\d+\.\d+) \| CHANGED/', $line,$matches)) {
+        $hostsStatus[$matches[1]] = '运行状态';
+    } elseif (preg_match('/(\d+\.\d+\.\d+\.\d+) \|/', $line,$matches)) {
+        $hostsStatus[$matches[1]] = '离线状态';
+    }
+}
+
+echo <<<HTML
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>机器状态监控</title>
+    <meta http-equiv="refresh" content="10">
+    <style>
+        .running { color: green; font-weight: bold; }
+        .offline { color: red; font-weight: bold; }
+        .btn { 
+            padding: 10px 20px; 
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-size: 16px;
+        }
+        .btn:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>机器状态监控</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>机器IP</th>
+                <th>状态</th>
+            </tr>
+        </thead>
+        <tbody>
+HTML;
+
+foreach ($hostsStatus as $ip => $status) {
+    $class = ($status === '运行状态') ? 'running' : 'offline';
+    echo "<tr><td>{$ip}</td><td class='{$class}'>{$status}</td></tr>\n";
+}
+
+echo <<<HTML
+        </tbody>
+    </table>
+HTML;
+
+if (in_array('运行状态', $hostsStatus)) {
+    echo <<<HTML
+    <form method="POST">
+        <input type="submit" class="btn" value="关机受控主机">
+    </form>
+HTML;
+}
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    shell_exec('sudo ansible web -m command -a "shutdown -h now" -u root');
+}
+
+echo <<<HTML
+</body>
+</html>
+HTML;
+
+?>
